@@ -1,9 +1,11 @@
-import React, { Component } from 'react';
+import React, { Component, Fragment } from 'react';
 import PropTypes from 'prop-types';
 import Slider from 'rc-slider';
 import Sound from 'react-sound';
 
 import { connect } from 'react-redux';
+import { Creators as PlayerActions } from '../../store/ducks/player';
+import { bindActionCreators } from 'redux';
 
 import {
   Container,
@@ -27,10 +29,24 @@ class Player extends Component {
   static propTypes = {
     player: PropTypes.shape({
       currentSong: PropTypes.shape({
-        file: PropTypes.string
+        file: PropTypes.string,
+        thumbnail: PropTypes.string,
+        title: PropTypes.string,
+        author: PropTypes.string
       }),
       status: PropTypes.string
-    }).isRequired
+    }).isRequired,
+    play: PropTypes.func.isRequired,
+    pause: PropTypes.func.isRequired,
+    next: PropTypes.func.isRequired,
+    prev: PropTypes.func.isRequired,
+    playing: PropTypes.func.isRequired,
+    handlePosition: PropTypes.func.isRequired,
+    setPosition: PropTypes.func.isRequired,
+    setVolume: PropTypes.func.isRequired,
+    position: PropTypes.string.isRequired,
+    positionShown: PropTypes.string.isRequired,
+    duration: PropTypes.string.isRequired
   };
 
   render() {
@@ -40,17 +56,25 @@ class Player extends Component {
           <Sound
             url={this.props.player.currentSong.file}
             playStatus={this.props.player.status}
+            onFinishedPlaying={this.props.next}
+            onPlaying={this.props.playing}
+            position={this.props.player.position}
+            volume={this.props.player.volume}
           />
         )}
         <Current>
-          <img
-            src="https://t2.genius.com/unsafe/300x300/https%3A%2F%2Fimages.genius.com%2Fba602b559ff37ab14df0860b5a898436.1000x1000x1.jpg"
-            alt="Cover"
-          />
-          <div>
-            <span>Chlorine</span>
-            <small>twenty one pilots</small>
-          </div>
+          {!!this.props.player.currentSong && (
+            <Fragment>
+              <img
+                src={this.props.player.currentSong.thumbnail}
+                alt={this.props.player.currentSong.title}
+              />
+              <div>
+                <span>{this.props.player.currentSong.title}</span>
+                <small>{this.props.player.currentSong.author}</small>
+              </div>
+            </Fragment>
+          )}
         </Current>
 
         <Progress>
@@ -58,13 +82,21 @@ class Player extends Component {
             <button>
               <img src={ShuffleIcon} alt="ShuffleIcon" />
             </button>
-            <button>
+            <button onClick={this.props.prev}>
               <img src={BackwardIcon} alt="BackwardIcon" />
             </button>
-            <button>
-              <img src={PlayIcon} alt="PlayIcon" />
-            </button>
-            <button>
+            {!!this.props.player.currentSong &&
+            this.props.player.status === Sound.status.PLAYING ? (
+              <button onClick={this.props.pause}>
+                <img src={PauseIcon} alt="PauseIcon" />
+              </button>
+            ) : (
+              <button onClick={this.props.play}>
+                <img src={PlayIcon} alt="PlayIcon" />
+              </button>
+            )}
+
+            <button onClick={this.props.next}>
               <img src={ForwardIcon} alt="ForwardIcon" />
             </button>
             <button>
@@ -73,15 +105,19 @@ class Player extends Component {
           </Controls>
 
           <Time>
-            <span>1:39</span>
+            <span>{this.props.positionShown || this.props.position}</span>
             <ProgressSlider>
               <Slider
                 railStyle={{ background: '#404040', borderRadius: 10 }}
                 trackStyle={{ background: '#1ED760' }}
                 handleStyle={{ border: 0 }}
+                max={1000}
+                onChange={value => this.props.handlePosition(value / 1000)}
+                onAfterChange={value => this.props.setPosition(value / 1000)}
+                value={this.props.progress}
               />
             </ProgressSlider>
-            <span>4:20</span>
+            <span>{this.props.duration}</span>
           </Time>
         </Progress>
 
@@ -91,7 +127,8 @@ class Player extends Component {
             railStyle={{ background: '#404040', borderRadius: 10 }}
             trackStyle={{ background: '#FFF' }}
             handleStyle={{ display: 'none' }}
-            value={100}
+            value={this.props.player.volume}
+            onChange={this.props.setVolume}
           />
         </Volume>
       </Container>
@@ -99,8 +136,34 @@ class Player extends Component {
   }
 }
 
+function msToTime(duration) {
+  if (!duration) return null;
+
+  let seconds = parseInt((duration / 1000) % 60, 10);
+  const minutes = parseInt((duration / (1000 * 60)) % 60, 10);
+
+  seconds = seconds < 10 ? `0${seconds}` : seconds;
+
+  return `${minutes}:${seconds}`;
+}
+
 const mapStateToProps = state => ({
-  player: state.player
+  player: state.player,
+  position: msToTime(state.player.position),
+  duration: msToTime(state.player.duration),
+  positionShown: msToTime(state.player.positionShown),
+  progress:
+    parseInt(
+      (state.player.positionShown || state.player.position) *
+        (1000 / state.player.duration),
+      10
+    ) || 0
 });
 
-export default connect(mapStateToProps)(Player);
+const mapDispatchToProps = dispatch =>
+  bindActionCreators(PlayerActions, dispatch);
+
+export default connect(
+  mapStateToProps,
+  mapDispatchToProps
+)(Player);
